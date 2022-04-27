@@ -1,88 +1,111 @@
-import pandas as pd
-import torch
+"""
+Python script to prepare the dataset
+"""
 import os
-import cv2
 import numpy as np
+import cv2
+import torch
+import glob
+import albumentations as A
+import pandas as pd
+import config
+from torch.utils.data import Dataset
+from albumentations.pytorch.transforms import ToTensorV2
+from torch.utils.data import DataLoader
 
-class CardiacDataset(torch.utils.data.Dataset):
-
-    def __init__(self, path_to_labels_csv, directory,root, augs):
+class PotHoleDataset(Dataset):
+    def __init__(self, dataframe, image_dir, transforms=None):
+        super().__init__()
+        self.image_ids = dataframe['image_id'].unique()
+        self.df = dataframe
+        self.image_dir = image_dir
+        self.transforms = transforms
         
-        self.labels = pd.read_csv(path_to_labels_csv)
-        self.bbox = []
-        self.root_path = root
-        self.directory = directory
-        self.patients = []
-        self.augment = augs
-
-    def set_up_dataset(self):
-        for root, dirs, files in os.walk(self.directory):
-            for filename in files:
-                path = os.path.join(root, filename)
-                img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-                y, x = img.shape
-                img = cv2.resize(img,(360,360))
-                patient = filename.replace('.',' ').split()[0]
-                data = self.labels[self.labels["image_id"]==patient]
+    def __getitem__(self, index: int):
+        image_id = self.image_ids[index]
+        records = self.df[self.df['image_id'] == image_id]
+        image = cv2.imread(f"{self.image_dir}/Train Data/Positive data/{image_id}.JPG", cv2.IMREAD_COLOR)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
+        image /= 255.0
+    
+        # convert the boxes into x_min, y_min, x_max, y_max format
+        boxes = records[['x', 'y', 'w', 'h']].values
+        boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
+        boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
         
-                # Get entries of given patient
-                # Extract coordinates
-                x_min = data["x"]*(360/x)
-                y_min = data["y"]*(360/y)
-                x_max = x_min + data["w"]*(360/x)  # get xmax from width
-                y_max = y_min + data["h"]*(360/y)  # get ymax from height
-                try:
-                    max_arg = y_max.argmax()
-                    bbox = [x_min.to_list()[max_arg],y_min.to_list()[max_arg],x_max.to_list()[max_arg],y_max.to_list()[max_arg]]
-                except:
-                    max_arg = 0
-                    bbox = [np.NaN, np.NaN, np.NaN, np.NaN]
-                
-                self.patients.append(img)
-                self.bbox.append(bbox)
-                if len(self.patients) == 1000:
-                    break
-            if len(self.patients) == 1000:
-                break
-    def  __len__(self):
-        """
-        Returns the length of the dataset
-        """
-        return len(self.patients)
+        # get the area of the bounding boxes
+        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        area = torch.as_tensor(area, dtype=torch.float32)
+        # we have only one class
+        labels = torch.ones((records.shape[0],), dtype=torch.int64)
         
-    def __getitem__(self, idx):
-        """
-        Returns an image paired with bbox around the heart
-        """
-        patient = self.patients[idx]
-        # Get data according to index
-        bbox = self.bbox[idx]
-
-        # # Load file and convert to float32
-        # file_path = self.root_path/patient  # Create the path to the file
-        # img = np.load(f"{file_path}.npy").astype(np.float32)
-        img = patient.astype(np.float32)
+        # supposing that all instances are not crowd
+        iscrowd = torch.zeros((records.shape[0],), dtype=torch.int64)
         
-        # # Apply imgaug augmentations to image and bounding box
-        # if self.augment:
+        target = {}
+        target['boxes'] = boxes
+        target['labels'] = labels
+        target['image_id'] = torch.tensor([index])
+        target['area'] = area
+        target['iscrowd'] = iscrowd
+        # apply the image transforms
+        if self.transforms:
+            sample = {
+                'image': image,
+                'bboxes': target['boxes'],
+                'labels': labels
+            }
+            sample = self.transforms(**sample)
+            image = sample['image']
             
-        #     bb = BoundingBox(x1=bbox[0], y1=bbox[1], x2=bbox[2], y2=bbox[3])
-            
-        #     ###################IMPORTANT###################
-        #     # Fix for https://discuss.pytorch.org/t/dataloader-workers-generate-the-same-random-augmentations/28830/2
-        #     # https://github.com/pytorch/pytorch/issues/5059
-        #     random_seed = torch.randint(0, 1000000, (1,)).item()
-        #     imgaug.seed(random_seed)
-        #     #####################################################
+            # convert the bounding boxes to PyTorch `FloatTensor`
+            target['boxes'] = torch.stack(tuple(map(torch.FloatTensor, 
+                                                    zip(*sample['bboxes'])))).permute(1, 0)
+        return image, target, image_id
+    def __len__(self):
+        return self.image_ids.shape[0]
 
-        #     img, aug_bbox  = self.augment(image=img, bounding_boxes=bb)
-        #     bbox = aug_bbox[0][0], aug_bbox[0][1], aug_bbox[1][0], aug_bbox[1][1]
-            
-            
-        # Normalize the image according to the values computed in Preprocessing
-        img = (img - 0.494) / 0.252
+def collate_fn(batch):
+    """
+    This function helps when we have different number of object instances
+    in the batches in the dataset.
+    """
+    return tuple(zip(*batch))
+# function for the image transforms
 
-        img = torch.tensor(img).unsqueeze(0)
-        bbox = torch.tensor(bbox)
-            
-        return img, bbox
+def train_transform():
+    return A.Compose([
+        A.Flip(0.5),
+        # A.RandomRotate90(0.5),
+        # A.MotionBlur(p=0.2),
+        # A.MedianBlur(blur_limit=3, p=0.1),
+        # A.Blur(blur_limit=3, p=0.1),
+        ToTensorV2(p=1.0)
+    ], bbox_params={'format': 'pascal_voc', 'label_fields': ['labels']})
+
+# path to the input root directory
+DIR_INPUT = config.ROOT_PATH
+# read the annotation CSV file
+train_df = pd.read_csv(f"Data/train_df.csv")
+print(train_df.head())
+print(f"Total number of image IDs (objects) in dataframe: {len(train_df)}")
+# get all the image paths as list
+image_paths = glob.glob(f"{DIR_INPUT}/Train Data/Positive data/*.JPG")
+image_names = []
+for image_path in image_paths:
+    image_names.append(image_path.split(os.path.sep)[-1].split('.')[0])
+print(f"Total number of training images in folder: {len(image_names)}")
+image_ids = train_df['image_id'].unique()
+print(f"Total number of unique train images IDs in dataframe: {len(image_ids)}")
+# number of images that we want to train out of all the unique images
+train_ids = image_names[:] # use all the images for training
+train_df = train_df[train_df['image_id'].isin(train_ids)]
+print(f"Number of image IDs (objects) training on: {len(train_df)}")
+
+train_dataset = PotHoleDataset(train_df, DIR_INPUT, train_transform())
+train_data_loader = DataLoader(
+    train_dataset,
+    batch_size=config.BATCH_SIZE,
+    shuffle=False,
+    collate_fn=collate_fn
+)
