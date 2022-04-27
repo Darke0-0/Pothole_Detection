@@ -5,6 +5,7 @@ import torch
 from tqdm import tqdm
 import config
 from model import model
+from os.path import isfile, join
 
 # set the computation device
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -50,7 +51,6 @@ with torch.no_grad():
             cv2.imwrite(f"test_predictions/{test_images[i]}", orig_image,)
 print('TEST PREDICTIONS COMPLETE')
 
-from os.path import isfile, join
 def convert_frames_to_video(pathIn,pathOut,fps):
     frame_array = []
     files = [f for f in os.listdir(pathIn) if isfile(join(pathIn, f))]
@@ -64,6 +64,8 @@ def convert_frames_to_video(pathIn,pathOut,fps):
         size = (width,height)
         #inserting the frames into an image array
         frame_array.append(img)
+        if len(frame_array) == 300:
+            break
     out = cv2.VideoWriter(pathOut,cv2.VideoWriter_fourcc(*'DIVX'), fps, size)
     for i in range(len(frame_array)):
         # writing to a image array
