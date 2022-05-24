@@ -1,3 +1,4 @@
+# Global Variables
 ROOT_PATH = 'Data/Dataset'
 TEST_PATH = 'Data/Dataset/Test data'
 PREDICTION_THRES = 0.8

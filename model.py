@@ -9,10 +9,7 @@ from torchvision.models.detection.rpn import AnchorGenerator
 import config
 
 def model():
-    # load the COCO pre-trained model
-    # we will keep the image size to the original 800 for faster training,
-    # you can increase the `min_size` in `config.py` for better ressults,
-    # although it may increase the training time (a trade-off)
+    # load the pre-trained model
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True, 
                                                                  min_size=config.MIN_SIZE)
     # one class is for pot holes, and the other is background

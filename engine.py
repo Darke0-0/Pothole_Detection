@@ -10,11 +10,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = model().to(device)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
+# Training Function 
 def train(train_dataloader):
     model.train()
     running_loss = 0
     for i, data in enumerate(train_dataloader):
-        
         optimizer.zero_grad()
         images, targets, images_ids = data[0], data[1], data[2]
         images = list(image.to(device) for image in images)

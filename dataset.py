@@ -76,19 +76,17 @@ def collate_fn(batch):
 def train_transform():
     return A.Compose([
         A.Flip(0.5),
-        # A.RandomRotate90(0.5),
-        # A.MotionBlur(p=0.2),
-        # A.MedianBlur(blur_limit=3, p=0.1),
-        # A.Blur(blur_limit=3, p=0.1),
         ToTensorV2(p=1.0)
     ], bbox_params={'format': 'pascal_voc', 'label_fields': ['labels']})
 
 # path to the input root directory
 DIR_INPUT = config.ROOT_PATH
+
 # read the annotation CSV file
 train_df = pd.read_csv(f"Data/train_df.csv")
 print(train_df.head())
 print(f"Total number of image IDs (objects) in dataframe: {len(train_df)}")
+
 # get all the image paths as list
 image_paths = glob.glob(f"{DIR_INPUT}/Train Data/Positive data/*.JPG")
 image_names = []
@@ -97,6 +95,7 @@ for image_path in image_paths:
 print(f"Total number of training images in folder: {len(image_names)}")
 image_ids = train_df['image_id'].unique()
 print(f"Total number of unique train images IDs in dataframe: {len(image_ids)}")
+
 # number of images that we want to train out of all the unique images
 train_ids = image_names[:] # use all the images for training
 train_df = train_df[train_df['image_id'].isin(train_ids)]

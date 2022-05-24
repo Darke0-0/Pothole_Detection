@@ -54,7 +54,7 @@ print('TEST PREDICTIONS COMPLETE')
 def convert_frames_to_video(pathIn,pathOut,fps):
     frame_array = []
     files = [f for f in os.listdir(pathIn) if isfile(join(pathIn, f))]
-    # print(files)
+    
     #for sorting the file names properly
     for i in range(len(files)):
         filename=pathIn + files[i]
