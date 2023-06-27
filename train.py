@@ -1,8 +1,4 @@
-import torch
-import matplotlib
-import matplotlib.pyplot as plt
 import time
-from model import model
 import config
 from engine import train, visualize, save_model
 from dataset import train_data_loader, train_dataset

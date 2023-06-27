@@ -1,0 +1,7 @@
+numpy
+pillow-image
+torch
+pandas
+albumentations
+matplotlib
+torchvision
